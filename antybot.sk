@@ -1,0 +1,165 @@
+# ===============================================
+#                 [AntyBot]
+#                by SopelPL
+#
+#    1. Zakaz kopiowania kodu bez zgody autora
+#    2. Zakaz sprzedawania skryptu
+#    3. Zezwalam na modyfikacje skryptu na własny użytek
+#    4. Miłego korzystania
+# ===============================================
+options:
+    lockTime: 5                                #Czas na jaki gracz zostanie zablokowany (w minutach)
+    howMuchToLock: 3                        #Po ilu nieudanych probach weryfikacji gracza dostanie blokade
+    adminPermission: antybot.admin            #Permisja dla administratorow
+    ignorePermission: antybot.ignore        #Permisja zabezpieczajaca przed usunieciem weryfikacji
+
+on join:
+    if {antybot::session::%player%} isn't set:
+        wait 1 tick
+        set {_slot} to random integer between 0 and 8
+        set {_i} to 0
+        open chest with 1 rows named "&a&lWeryfikacja &6Anty-Bot" to player
+        loop 9 times:
+            if {_i} isn't {_slot}:
+                set slot {_i} of player's current inventory to black stained glass pane named "&7"
+            else:
+                set slot {_i} of player's current inventory to green wool named "&aZweryfikuj"
+            add 1 to {_i}
+        stop
+on connect:
+    set {_isBlocked} to yaml value "blocked" from file "../../SAntyBot/blocked/%player%.yml"
+    if {_isBlocked} == true:
+        set {_ending} to {antybot::blockedTime::%player%}
+        if now >= {_ending}:
+            delete yaml value "blocked" from file "../../SAntyBot/blocked/%player%.yml"
+            delete {antybot::blockedTime::%player%}
+            remove player from {antybot::blockedUsers::*}
+            stop
+        else:
+            kick player due to "&6Twoje konto jest tymczasowo zablokowane!%nl%&4&lWygasa: &6%{antybot::blockedTime::%player%}%"
+            stop
+on inventory close:
+    if {antybot::session::%player%} isn't set:
+        kick player due to "&cMusisz sie zweryfikowac!"
+        stop
+on inventory click:
+    if inventory name of player's current inventory is "&a&lWeryfikacja &6Anty-Bot":
+        if player's current inventory's slot slot is green wool:
+            set {antybot::session::%player%} to player's uuid
+            delete {antybot::warns::%player%}
+            send "&aDziekujemy za weryfikacje! Zyczymy milej gry!"
+            close player's inventory
+            stop
+        else:
+            add 1 to {antybot::warns::%player%}
+            if {antybot::warns::%player%} >= {@howMuchToLock}:
+                set {_end} to now
+                add {@lockTime} minutes to {_end}
+                set yaml value "blocked" from file "../../SAntyBot/blocked/%player%.yml" to true
+                set {antybot::blockedTime::%player%} to {_end}
+                add player to {antybot::blockedUsers::*}
+                kick player due to "&6Informujemy iz twoje konto zostalo tymczasowo zablokowane na &c{@lockTime} minut!"
+                clear {antybot::warns::%player%}
+                stop
+            else:
+                kick player due to "&cBlad weryfikacji! &7(&6%{antybot::warns::%player%}%/{@howMuchToLock}) &cproby!"
+                cancel event
+                stop
+command /antybot [<text=help>] [<offline player>]:
+    trigger:
+        if sender has permission "{@adminPermission}":
+            if arg 1 is "help":
+                send "&7&l________ &8[ &aAnty-Bot&8 ] &7&l________"
+                send "&7&l>> &c/antybot unauth <player> &a - Uniewaznia weryfikacje gracza"
+                send "&7&l>> &c/antybot blocked &a - Lista zablokowanych graczy"
+                send "&7&l>> &c/antybot unlock <player> &a - Zdejmuje blokade z gracza"
+                send "&7&l>> &c/antybot info <player> &a - Wyswietla informacje o blokadzie gracza"
+                send "&7&l>> &c/antybot lock <player> &a - Naklada blokade na gracza"
+                send "&7&l________ &8[ &aAnty-Bot&8 ] &7&l________"
+                stop
+            if arg 1 is "unauth":
+                if arg 2 is set:
+                    if {antybot::session::%arg 2%} is set:
+                        if arg 2 is online:
+                            if arg 2 doesn't have permission "{@ignorePermission}":
+                                delete {antybot::session::%arg 2%}
+                                send "&aWeryfikacja dla gracza &6%arg 2% &azostala uniewazniona!"
+                                stop
+                            else:
+                                send "&cTen gracz ma za wysokie uprawnienia!"
+                                stop
+                        else:
+                            send "&cTen gracz jest offline!"
+                            stop
+                    else:
+                        send "&cSesja tego gracza nie zostala znaleziona!"
+                        stop
+                else:
+                    send "&cPodaj nick gracza!"
+                    stop
+            if arg 1 is "blocked":
+                send "&4&lZablokowani gracze:"
+                send "   &aNick    &7|    &6Wygasa"
+                send "&7_______________________________________"
+                loop {antybot::blockedUsers::*}:
+                    send "    &a%loop-value%    &7|    &6%{antybot::blockedTime::%loop-value%}%"
+                stop
+            if arg 1 is "unlock":
+                if arg 2 is set:
+                    set {_isBlocked} to yaml value "blocked" from file "../../SAntyBot/blocked/%arg 2%.yml"
+                    if {_isBlocked} == true:
+                        delete yaml value "blocked" from file "../../SAntyBot/blocked/%arg 2%.yml"
+                        delete {antybot::blockedTime::%arg 2%}
+                        remove arg 2 from {antybot::blockedUsers::*}
+                        send "&aGracz zostal odblokowany!"
+                        stop
+                    else:
+                        send "&cTen gracz nie posiada blokady!"
+                        stop
+                else:
+                    send "&cPodaj nick gracza!"
+                    stop
+            if arg 1 is "info":
+                if arg 2 is set:
+                    if {antybot::session::%arg 2%} is set:
+                        send "&4&lInformacje o graczu &6%arg 2%"
+                        if {antybot::blockedTime::%arg 2%} is set:
+                            send "&7&l>> &aBlokada: &c%{antybot::blockedTime::%arg 2%}%"
+                        else:
+                            send "&7&l>> &aBlokada: &cBrak"
+                    else:
+                        if {antybot::blockedTime::%arg 2%} is set:
+                            send "&cTen gracz nie jest zweryfikowany, ale ma blokade ktora wygasa &6%{antybot::blockedTime::%arg 2%}%"
+                            stop
+                        send "&cTen gracz nie jest zweryfikowany i nie posiada zadnych blokad!"
+                        stop
+                else:
+                    send "&cPodaj nick gracza!"
+                    stop
+            if arg 1 is "lock":
+                if arg 2 is set:
+                    if {antybot::session::%arg 2%} isn't set:
+                        set {_isBlocked} to yaml value "blocked" from file "../../SAntyBot/blocked/%arg 2%.yml"
+                        if {_isBlocked} isn't set:
+                            set {_end} to now
+                            add {@lockTime} minutes to {_end}
+                            set yaml value "blocked" from file "../../SAntyBot/blocked/%arg 2%.yml" to true
+                            set {antybot::blockedTime::%arg 2%} to {_end}
+                            add arg 2 to {antybot::blockedUsers::*}
+                            if arg 2 is online:
+                                kick arg 2 due to "&6Informujemy iz twoje konto zostalo tymczasowo zablokowane na &c{@lockTime} minut!"
+                            clear {antybot::warns::%arg 2%}
+                            send "&aGracz zostal zablokowany!"
+                            stop
+                        else:
+                            send "&cTen gracz ma juz blokade!"
+                            stop
+                    else:
+                        send "&cNie mozesz zablokowac zweryfikowanego gracza!"
+                        stop
+                else:
+                    send "&cPodaj nick gracza!"
+                    stop
+        else:
+            send "&cBrak uprawnien! &7(&6{@adminPermission}&7)"
+            stop
